@@ -14,3 +14,32 @@ const interviewsBeforeDateNote=interviewsPage;
 interviewsPage=function(){return interviewsBeforeDateNote().replace('日期为所链接网页的发布日期，已知访谈或活动日期另列。','日期按所链接版本或节目发布信息记录；早期期刊书目保留原刊年份，已知活动日期另列。')};
 if(location.hash.split('/')[0]==='#interviews')render();
 
+/* Combinable filters; dates distinguish publication from the recorded event. */
+const interviewFilterLabels=()=>({zh:{works:'涉及作品',allWorks:'全部作品',unassigned:'未关联具体作品',language:'语言',allLanguages:'全部语言',zh:'中文',en:'英语',fr:'法语',und:'语言待核',period:'时间',allPeriods:'全部年代',basis:'时间依据',publication:'发表／发布',event:'访谈／活动',unknownDate:'活动时间未注明',reset:'清除筛选',none:'暂无符合筛选条件的采访。',decade:'年代'},en:{works:'Works discussed',allWorks:'All works',unassigned:'No specific work assigned',language:'Language',allLanguages:'All languages',zh:'Chinese',en:'English',fr:'French',und:'Language unverified',period:'Period',allPeriods:'All decades',basis:'Date basis',publication:'Publication / release',event:'Interview / event',unknownDate:'Event date not stated',reset:'Clear filters',none:'No interviews match these filters.',decade:'s'},fr:{works:'Œuvres abordées',allWorks:'Toutes les œuvres',unassigned:'Sans œuvre précise associée',language:'Langue',allLanguages:'Toutes les langues',zh:'Chinois',en:'Anglais',fr:'Français',und:'Langue à vérifier',period:'Période',allPeriods:'Toutes les décennies',basis:'Date retenue',publication:'Publication / diffusion',event:'Entretien / rencontre',unknownDate:'Date de rencontre non indiquée',reset:'Effacer les filtres',none:'Aucun entretien ne correspond aux filtres.',decade:''}})[document.documentElement?.lang?.slice(0,2)]||null;
+const normalizeInterviewWork=s=>String(s||'').replace(/[《》“”「」『』，,、\s]/g,'');
+const interviewWorkTitles=[...new Set(works.filter(w=>['出版','发表'].includes(w.group)).map(w=>w.title))].filter(t=>t.length>1);
+interviewRecords.forEach(r=>{
+ r.relatedWorks=interviewWorkTitles.filter(t=>normalizeInterviewWork(r.topics).includes(normalizeInterviewWork(t))||r.title.includes('《'+t+'》'));
+ r.languages=r.language==='英语'?['en']:r.language==='法语节目'?['fr','zh']:r.format==='文字'||r.format==='音频'||r.url.includes('chinanews.com/shipin')?['zh']:['und'];
+});
+const interviewPageBeforeFilters=interviewsPage;
+interviewsPage=function(){const l=interviewFilterLabels()||{works:'涉及作品',allWorks:'全部作品',unassigned:'未关联具体作品',language:'语言',allLanguages:'全部语言',zh:'中文',en:'英语',fr:'法语',und:'语言待核',period:'时间',allPeriods:'全部年代',basis:'时间依据',publication:'发表／发布',event:'访谈／活动',unknownDate:'活动时间未注明',reset:'清除筛选',decade:'年代'};
+ const titles=[...new Set(interviewRecords.flatMap(r=>r.relatedWorks))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+ const decades=[...new Set(interviewRecords.flatMap(r=>[r.date,r.eventDate]).filter(Boolean).map(v=>v.match(/\d{4}/)?.[0]).filter(Boolean).map(y=>Math.floor(Number(y)/10)*10))].sort();
+ const select=(id,label,options)=>'<label class="interview-filter-field"><span>'+esc(label)+'</span><select id="'+id+'" aria-label="'+esc(label)+'">'+options.map(([value,text])=>'<option value="'+esc(value)+'">'+esc(text)+'</option>').join('')+'</select></label>';
+ const filters='<div class="interview-filters">'+select('interviewWork',l.works,[['all',l.allWorks],...titles.map(t=>[t,'《'+t+'》']),['unassigned',l.unassigned]])+select('interviewLanguage',l.language,[['all',l.allLanguages],['zh',l.zh],['en',l.en],['fr',l.fr],['und',l.und]])+select('interviewDecade',l.period,[['all',l.allPeriods],...decades.map(d=>[String(d),String(d)+l.decade]),['unknown',l.unknownDate]])+select('interviewDateBasis',l.basis,[['publication',l.publication],['event',l.event]])+'<button type="button" id="resetInterviewFilters">'+esc(l.reset)+'</button></div>';
+ return interviewPageBeforeFilters().replace('<p id="interviewCount"',filters+'<p id="interviewCount"');
+};
+const renderInterviewsBeforeFilters=renderInterviews;
+renderInterviews=function(){
+ const work=document.querySelector('#interviewWork').value||'all',language=document.querySelector('#interviewLanguage').value||'all',decade=document.querySelector('#interviewDecade').value||'all',basis=document.querySelector('#interviewDateBasis').value||'publication';
+ const candidates=interviewRecords.filter(r=>{const date=basis==='event'?r.eventDate:r.date,year=String(date||'').match(/\d{4}/)?.[0],recordDecade=year?String(Math.floor(Number(year)/10)*10):'unknown';return (work==='all'||(work==='unassigned'?r.relatedWorks.length===0:r.relatedWorks.includes(work)))&&(language==='all'||r.languages.includes(language))&&(decade==='all'||recordDecade===decade)});
+ const all=interviewRecords.slice();interviewRecords.splice(0,interviewRecords.length,...candidates);
+ try{renderInterviewsBeforeFilters()}finally{interviewRecords.splice(0,interviewRecords.length,...all)}
+};
+const renderBeforeInterviewFilters=render;
+render=function(){renderBeforeInterviewFilters();if(location.hash.split('/')[0]!=='#interviews')return;
+ for(const id of ['interviewWork','interviewLanguage','interviewDecade','interviewDateBasis'])document.querySelector('#'+id).addEventListener('change',renderInterviews);
+ document.querySelector('#resetInterviewFilters').addEventListener('click',()=>{for(const id of ['interviewWork','interviewLanguage','interviewDecade'])document.querySelector('#'+id).value='all';document.querySelector('#interviewDateBasis').value='publication';document.querySelector('#interviewSearch').value='';document.querySelector('#interviewFormat').value='全部形式';document.querySelector('#interviewSort').value='desc';renderInterviews()});
+};
+if(location.hash.split('/')[0]==='#interviews')render();
